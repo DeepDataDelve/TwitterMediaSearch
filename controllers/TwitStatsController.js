@@ -10,7 +10,7 @@ var Twitter = require('twitter');
 var mongoose = require('mongoose');
 
 //Set up default mongoose connection
-var mongoDB = 'mongodb://192.168.1.163/twitertMetaStats';
+var mongoDB = process.env.MONGO_SERVER_ADDRESS //'mongodb://192.168.1.163/twitertMetaStats';
 mongoose.connect(mongoDB, { useNewUrlParser: true });
 
 //Get the default connection
@@ -20,7 +20,6 @@ var db = mongoose.connection;
 db.on('error', console.error.bind(console, 'MongoDB connection error:'));
 
 //Get mongoose schema for tweets
-var tweetModel = responseSchema;
 
 //START: TEST SCHEMA TO REDUCE JSON
 const schema = require('schm')
@@ -72,7 +71,7 @@ router.get('/debug/user/:username', function (req, res) {
 				console.log("media:" + JSON.stringify(tweet.entities.media));
 				if(media.hashtags)
 				{
-					var tags = string.empty;
+					var tags = "";
 					for(var key in media.hashtags) {
 						tags+=(media.hashtags[key]["text"] + " ");
 					}
@@ -121,7 +120,7 @@ var fparams = {
 			let media = tweet.entities;
 			if(media.hashtags)
 			{
-				var tags = string.empty;
+				var tags = "";
 				for(var key in media.hashtags) {
 					tags+=(media.hashtags[key]["text"] + " ");
 				}
@@ -155,7 +154,7 @@ router.get('/posts/user/:username', function (req, res) {
 var resultSet = [];
 var ts = Math.round(new Date().getTime() / 1000);
 var tsYesterday = ts - (24 * 3600);
-client.get('statuses/user_timeline', {screen_name: req.params.username}, function(error, tweets, response) {
+client.get('statuses/user_timeline', {screen_name: req.params.username, count: 200}, function(error, tweets, response) {
 	   if (error) return res.status(500).send("There was a problem retrieving the tweets.");
 	   tweets.some(function(tweet) {
 			let timeStamp = Math.round(new Date(tweet.created_at))/1000;
@@ -163,7 +162,7 @@ client.get('statuses/user_timeline', {screen_name: req.params.username}, functio
 			let media = tweet.entities;
 			if(media.hashtags)
 			{
-				var tags = string.empty;
+				var tags = "";
 				for(var key in media.hashtags) {
 					tags+=(media.hashtags[key]["text"] + " ");
 				}
@@ -212,7 +211,7 @@ var tsYesterday = ts - (24 * 3600);
 			let media = tweet.entities;
 			if(media.hashtags)
 			{
-				var tags = string.empty;
+				var tags = "";
 				for(var key in media.hashtags) {
 					tags+=(media.hashtags[key]["text"] + " ");
 				}
@@ -249,7 +248,7 @@ router.post('/posts/user/:username', function (req, res) {
 			let media = tweet.entities;
 			if(media.hashtags)
 			{
-				var tags = string.empty;
+				var tags = "";
 				for(var key in media.hashtags) {
 					tags+=(media.hashtags[key]["text"] + " ");
 				}
@@ -276,7 +275,7 @@ router.post('/posts/user/:username', function (req, res) {
 });
 
 // POSTS ALL TRACKED USERS' META INFO TO MONGO DB
-router.post('/posts/user/', function (req, res) {
+router.put('/posts/user/', function (req, res) {
 	//initialize variables
 	var resultSet = [];
 	var ts = Math.round(new Date().getTime() / 1000);
@@ -287,40 +286,87 @@ router.post('/posts/user/', function (req, res) {
 		var array = data.toString().split("\n");
 		for(username in array) {
 			//fill the result set with each
-			client.get('statuses/user_timeline', {screen_name: username}, function(error, tweets, response) {
+			client.get('statuses/user_timeline', {screen_name: username, count: 200}, function(error, tweets, response) {
 				if (error) return res.status(500).send("There was a problem retrieving the tweets.");
 				let timeStamp = Math.round(new Date(tweet.created_at))/1000;
 				tweets.statuses.some(function(tweet) {
-					if(timeStamp < tsYesterday){return true;}
-					let media = tweet.entities;
-					if(media.hashtags)
-					{
-						var tags = string.empty;
-						for(var key in media.hashtags) {
-							tags+=(media.hashtags[key]["text"] + " ");
+						if(timeStamp < tsYesterday){return true;}
+						let media = tweet.entities;
+						if(media.hashtags)
+						{
+							var tags = "";
+							for(var key in media.hashtags) {
+								tags+=(media.hashtags[key]["text"] + " ");
+							}
 						}
-					}
-					if(media.media)
-					{
-						var mediaType = media.media[0].media_url;
-					}
-					var stats = new tweetModel({
-							userName: tweet.user.screen_name,
-							retweets: tweet.retweet_count,
-							quotes: tweet.quote_count,
-							favorites: tweet.favorite_count,
-							followers: tweet.user.followers_count,
-							hashtags: tags,
-							media: mediaType,
-							date: tweet.created_at
-						});
-					stats.save(); //save each tweet's metadata to our collection
+						if(media.media)
+						{
+							var mediaType = media.media[0].media_url;
+						}
+						var stats = new tweetModel({
+								userName: tweet.user.screen_name,
+								retweets: tweet.retweet_count,
+								quotes: tweet.quote_count,
+								favorites: tweet.favorite_count,
+								followers: tweet.user.followers_count,
+								hashtags: tags,
+								media: mediaType,
+								date: tweet.created_at
+							});
+						stats.save(); //save each tweet's metadata to our collection
 				});
 			 });
 			 //END CLIENT GET	
 		}
 	});
 	//END POST OPERATION	
+});
+
+//ADMIN ONLY COMMANDS:
+router.post('/data/list/:username', function (req, res) {
+		var loggedIn = false;
+		var adminName = process.env.ADMIN_NAME;
+		var adminPW = process.env.ADMIN_PW;
+		if(req.get('login_name') === adminName && req.get('password') === adminPW)
+		{
+			loggedIn = true;
+		}
+		if(loggedIn == true)
+		{
+			//adds username to list of usernames to search in the automated PUT function
+			fs.appendFile('usernames.txt', req.params.username, (err) => {
+			console.log(err);	
+			});
+		}
+		else
+		{
+				return res.status(500).send("Unauthorized Access");
+		}
+});
+
+router.delete('/data/list/:username', function (req, res) {
+	var loggedIn = false;
+	var adminName = process.env.ADMIN_NAME;
+	var adminPW = process.env.ADMIN_PW;
+	if(req.get('login_name') === adminName && req.get('password') === adminPW)
+	{
+		loggedIn = true;
+	}
+	if(loggedIn == true)
+	{
+		tweetModel.find({ userName: req.params.username }, (err, user) => { 
+			if (err) throw err;
+					// delete this person's entries
+					user.remove(function(err) {
+						if (err) throw err;				
+						console.log('User successfully deleted!');
+					});
+		});
+	}
+	else
+	{
+			return res.status(500).send("Unauthorized Access");
+	}
 });
 
 module.exports = router;
