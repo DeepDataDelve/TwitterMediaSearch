@@ -2,7 +2,6 @@ require('dotenv').config();
 var express = require('express');
 var router = express.Router();
 var fs = require('fs');
-var tweetModel = require('../models/TwitStats');
 var bodyParser = require('body-parser');
 var Twitter = require('twitter');
 
@@ -10,7 +9,7 @@ var Twitter = require('twitter');
 var mongoose = require('mongoose');
 
 //Set up default mongoose connection
-var mongoDB = process.env.MONGO_SERVER_ADDRESS //'mongodb://192.168.1.163/twitertMetaStats';
+var mongoDB = process.env.MONGO_SERVER_ADDRESS
 mongoose.connect(mongoDB, { useNewUrlParser: true });
 
 //Get the default connection
@@ -20,13 +19,14 @@ var db = mongoose.connection;
 db.on('error', console.error.bind(console, 'MongoDB connection error:'));
 
 //Get mongoose schema for tweets
-
+var tweetModel = require('../models/TwitStats');
 //START: TEST SCHEMA TO REDUCE JSON
 const schema = require('schm')
 
 const statsSchema = schema({
   userName: String,
-  retweets: Number,
+	retweets: Number,
+	replies: Number,
   quotes: Number,
   favorites: Number,
   followers: Number,
@@ -87,6 +87,7 @@ router.get('/debug/user/:username', function (req, res) {
 				var stats = statsSchema.parse({
 						userName: tweet.user.screen_name,
 						retweets: tweet.retweet_count,
+						replies: tweet.reply_count,
 						quotes: tweet.quote_count,
 						favorites: tweet.favorite_count,
 						followers: tweet.user.followers_count,
@@ -134,6 +135,7 @@ var fparams = {
 			var stats = statsSchema.parse({
 					userName: tweet.user.screen_name,
 					retweets: tweet.retweet_count,
+					replies: tweet.reply_count,
 					quotes: tweet.quote_count,
 					favorites: tweet.favorite_count,
 					followers: tweet.user.follower_count,
@@ -174,6 +176,7 @@ client.get('statuses/user_timeline', {screen_name: req.params.username, count: 2
 			var stats = statsSchema.parse({
 					userName: tweet.user.screen_name,
 					retweets: tweet.retweet_count,
+					replies: tweet.reply_count,
 					quotes: tweet.quote_count,
 					favorites: tweet.favorite_count,
 					followers: tweet.user.followers_count,
@@ -223,6 +226,7 @@ var tsYesterday = ts - (24 * 3600);
 			var stats = new tweetModel({
 					userName: tweet.user.screen_name,
 					retweets: tweet.retweet_count,
+					replies: tweet.reply_count,
 					quotes: tweet.quote_count,
 					favorites: tweet.favorite_count,
 					followers: tweet.user.followers_count,
@@ -234,6 +238,7 @@ var tsYesterday = ts - (24 * 3600);
 	   });
 	});
 	//END CLIENT GET
+	res.status(200).send();
 });
 
 // POSTS A SINGLE USER'S POSTS AND TYPE TO MONGO DB
@@ -260,6 +265,7 @@ router.post('/posts/user/:username', function (req, res) {
 			var stats = new tweetModel({
 					userName: tweet.user.screen_name,
 					retweets: tweet.retweet_count,
+					replies: tweet.reply_count,
 					quotes: tweet.quote_count,
 					favorites: tweet.favorite_count,
 					followers: tweet.user.followers_count,
@@ -272,6 +278,7 @@ router.post('/posts/user/:username', function (req, res) {
 	   //console.log(statsSchema);
 	});
 	//END CLIENT GET	
+	res.status(200).send();
 });
 
 // POSTS ALL TRACKED USERS' META INFO TO MONGO DB
@@ -306,6 +313,7 @@ router.put('/posts/user/', function (req, res) {
 						var stats = new tweetModel({
 								userName: tweet.user.screen_name,
 								retweets: tweet.retweet_count,
+								replies: tweet.reply_count,
 								quotes: tweet.quote_count,
 								favorites: tweet.favorite_count,
 								followers: tweet.user.followers_count,
@@ -317,7 +325,8 @@ router.put('/posts/user/', function (req, res) {
 				});
 			 });
 			 //END CLIENT GET	
-		}
+		} //END LOOP
+		res.status(200).send();
 	});
 	//END POST OPERATION	
 });
@@ -342,6 +351,7 @@ router.post('/data/list/:username', function (req, res) {
 		{
 				return res.status(500).send("Unauthorized Access");
 		}
+		res.status(200).send();
 });
 
 router.delete('/data/list/:username', function (req, res) {
@@ -367,6 +377,7 @@ router.delete('/data/list/:username', function (req, res) {
 	{
 			return res.status(500).send("Unauthorized Access");
 	}
+	res.status(200).send();
 });
 
 module.exports = router;
