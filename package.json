@@ -1,0 +1,27 @@
+{
+  "name": "twitstats",
+  "version": "1.0.0",
+  "description": "Test to count tweets related to a name over time",
+  "main": "index.js",
+  "scripts": {
+    "test": "test"
+  },
+  "keywords": [
+    "Twitter",
+    "Search",
+    "Stats"
+  ],
+  "author": "Isaac Schneider",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^6.2.0",
+    "express": "^4.16.4",
+    "express-rate-limit": "^3.4.0",
+    "mongoose": "^5.4.22",
+    "morgan": "^1.9.1",
+    "request": "^2.88.0",
+    "request-promise": "^4.2.4",
+    "schm": "^0.4.1",
+    "twitter": "^1.7.1"
+  }
+}
