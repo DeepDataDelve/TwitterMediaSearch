@@ -53,6 +53,34 @@ router.get('/test', function (req, res) {
 		tweets.statuses.forEach(function(tweet) {console.log("tweet: " + tweet.text)});
 		res.send(JSON.stringify(tweets.statuses));
 	})
+
+	let name = 'test_USER';
+	testOut = tweetModel.findOne({name: new RegExp('^'+name+'$', "i")}, function(err, doc) {
+  console.log(testOut);
+	});
+
+});
+
+router.post('/test', function (req, res) {
+	let ts = Math.round(new Date().getTime() / 1000);
+	var stats = new tweetModel({
+			userName: "Test_USER"+ts,
+			retweets: (Math.floor(Math.random() * Math.floor(999))),
+			replies: (Math.floor(Math.random() * Math.floor(999))),
+			quotes: (Math.floor(Math.random() * Math.floor(999))),
+			favorites: (Math.floor(Math.random() * Math.floor(999))),
+			followers: (Math.floor(Math.random() * Math.floor(999))),
+			hashtags: "#testing",
+			media: "text",
+			date: new Date().toISOString()
+		});
+	console.log(stats.userName);
+	stats.save(function (err) {
+		if (err) return handleError(err);
+		// saved!
+	});
+	console.log("data saved to mongo!");
+	res.status(200).send();
 });
 
 // GETS A SINGLE USER'S POSTS FROM TWITTER (DEBUG VER, TO BE REMOVED)
@@ -247,7 +275,7 @@ router.post('/posts/user/:username', function (req, res) {
     var tsYesterday = ts - (24 * 3600);
 	client.get('statuses/user_timeline', {screen_name: req.params.username, count: 200}, function(error, tweets, response) {
 	   if (error) return res.status(500).send("There was a problem retrieving the tweets.");
-	   tweets.statuses.some(function(tweet) {
+	   tweets.some(function(tweet) {
 			let timeStamp = Math.round(new Date(tweet.created_at))/1000;
 			if(timeStamp < tsYesterday){return true;} //break out if tweets are older than 24h
 			let media = tweet.entities;
@@ -274,6 +302,7 @@ router.post('/posts/user/:username', function (req, res) {
 					date: tweet.created_at
 				});
 			stats.save();
+			console.log(tweet.created_at);
 	   });
 	   //console.log(statsSchema);
 	});
@@ -296,7 +325,7 @@ router.put('/posts/user/', function (req, res) {
 			client.get('statuses/user_timeline', {screen_name: username, count: 200}, function(error, tweets, response) {
 				if (error) return res.status(500).send("There was a problem retrieving the tweets.");
 				let timeStamp = Math.round(new Date(tweet.created_at))/1000;
-				tweets.statuses.some(function(tweet) {
+				tweets.some(function(tweet) {
 						if(timeStamp < tsYesterday){return true;}
 						let media = tweet.entities;
 						if(media.hashtags)
@@ -343,7 +372,7 @@ router.post('/data/list/:username', function (req, res) {
 		if(loggedIn == true)
 		{
 			//adds username to list of usernames to search in the automated PUT function
-			fs.appendFile('usernames.txt', req.params.username, (err) => {
+			fs.appendFile('usernames.txt', (req.params.username+'\n'), (err) => {
 			console.log(err);	
 			});
 		}
