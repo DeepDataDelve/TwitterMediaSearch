@@ -147,6 +147,7 @@ var fparams = {
 	   tweets.statuses.some(function(tweet) {
 			let timeStamp = Math.round(new Date(tweet.created_at))/1000;
 			let media = tweet.entities;
+			let mediaType = "text";
 			if(media.hashtags)
 			{
 				var tags = "";
@@ -156,8 +157,16 @@ var fparams = {
 			}
 			if(media.media)
 			{
-				var mediaType = media.media[0].media_url;
-			}			
+				let extractedMedia = media.media[0].media_url;
+				if(extractedMedia.includes("video_thumb"))
+				{
+					mediaType = "video";
+				}
+				else
+				{
+					mediaType = "image";
+				}
+			}
 			if(timeStamp < tsYesterday){return true;} //stop parsing tweets once we hit something from before the last 24H
 			
 			var stats = statsSchema.parse({
@@ -187,6 +196,7 @@ var tsYesterday = ts - (24 * 3600);
 client.get('statuses/user_timeline', {screen_name: req.params.username, count: 200}, function(error, tweets, response) {
 	   if (error) return res.status(500).send("There was a problem retrieving the tweets.");
 	   tweets.some(function(tweet) {
+			let mediaType = "text";
 			let timeStamp = Math.round(new Date(tweet.created_at))/1000;
 			if(timeStamp < tsYesterday){return true;}
 			let media = tweet.entities;
@@ -199,7 +209,15 @@ client.get('statuses/user_timeline', {screen_name: req.params.username, count: 2
 			}
 			if(media.media)
 			{
-				var mediaType = media.media[0].media_url;
+				let extractedMedia = media.media[0].media_url;
+				if(extractedMedia.includes("video_thumb"))
+				{
+					mediaType = "video";
+				}
+				else
+				{
+					mediaType = "image";
+				}
 			}
 			var stats = statsSchema.parse({
 					userName: tweet.user.screen_name,
@@ -240,6 +258,7 @@ var tsYesterday = ts - (24 * 3600);
 			let timeStamp = Math.round(new Date(tweet.created_at))/1000;
 			if(timeStamp < tsYesterday){return true;}
 			let media = tweet.entities;
+			let mediaType = "text";
 			if(media.hashtags)
 			{
 				var tags = "";
@@ -249,7 +268,15 @@ var tsYesterday = ts - (24 * 3600);
 			}
 			if(media.media)
 			{
-				var mediaType = media.media[0].media_url;
+				let extractedMedia = media.media[0].media_url;
+				if(extractedMedia.includes("video_thumb"))
+				{
+					mediaType = "video";
+				}
+				else
+				{
+					mediaType = "image";
+				}
 			}
 			var stats = new tweetModel({
 					userName: tweet.user.screen_name,
@@ -272,10 +299,12 @@ var tsYesterday = ts - (24 * 3600);
 // POSTS A SINGLE USER'S POSTS AND TYPE TO MONGO DB
 router.post('/posts/user/:username', function (req, res) {
 	var ts = Math.round(new Date().getTime() / 1000);
-    var tsYesterday = ts - (24 * 3600);
+		var tsYesterday = ts - (24 * 3600);
+
 	client.get('statuses/user_timeline', {screen_name: req.params.username, count: 200}, function(error, tweets, response) {
 	   if (error) return res.status(500).send("There was a problem retrieving the tweets.");
 	   tweets.some(function(tweet) {
+			var mediaType = "text";
 			let timeStamp = Math.round(new Date(tweet.created_at))/1000;
 			if(timeStamp < tsYesterday){return true;} //break out if tweets are older than 24h
 			let media = tweet.entities;
@@ -288,8 +317,16 @@ router.post('/posts/user/:username', function (req, res) {
 			}
 			if(media.media)
 			{
-				var mediaType = media.media[0].media_url;
-			}			
+				let extractedMedia = media.media[0].media_url;
+				if(extractedMedia.includes("video_thumb"))
+				{
+					mediaType = "video";
+				}
+				else
+				{
+					mediaType = "image";
+				}
+			}		
 			var stats = new tweetModel({
 					userName: tweet.user.screen_name,
 					retweets: tweet.retweet_count,
@@ -298,7 +335,7 @@ router.post('/posts/user/:username', function (req, res) {
 					favorites: tweet.favorite_count,
 					followers: tweet.user.followers_count,
 					hashtags: tweet.entities.hashtags.text,
-					media: tweet.entities.media.type,
+					media: mediaType,
 					date: tweet.created_at
 				});
 			stats.save();
@@ -325,6 +362,7 @@ router.put('/posts/user/', function (req, res) {
 			client.get('statuses/user_timeline', {screen_name: username, count: 200}, function(error, tweets, response) {
 				if (error) return res.status(500).send("There was a problem retrieving the tweets.");
 				let timeStamp = Math.round(new Date(tweet.created_at))/1000;
+				let mediaType = "text";
 				tweets.some(function(tweet) {
 						if(timeStamp < tsYesterday){return true;}
 						let media = tweet.entities;
@@ -337,7 +375,15 @@ router.put('/posts/user/', function (req, res) {
 						}
 						if(media.media)
 						{
-							var mediaType = media.media[0].media_url;
+							let extractedMedia = media.media[0].media_url;
+							if(extractedMedia.includes("video_thumb"))
+							{
+								mediaType = "video";
+							}
+							else
+							{
+								mediaType = "image";
+							}
 						}
 						var stats = new tweetModel({
 								userName: tweet.user.screen_name,
@@ -361,7 +407,7 @@ router.put('/posts/user/', function (req, res) {
 });
 
 //ADMIN ONLY COMMANDS:
-router.post('/data/list/:username', function (req, res) {
+router.get('/data/user/:username', function (req, res) {
 		var loggedIn = false;
 		var adminName = process.env.ADMIN_NAME;
 		var adminPW = process.env.ADMIN_PW;
@@ -371,19 +417,41 @@ router.post('/data/list/:username', function (req, res) {
 		}
 		if(loggedIn == true)
 		{
-			//adds username to list of usernames to search in the automated PUT function
-			fs.appendFile('usernames.txt', (req.params.username+'\n'), (err) => {
-			console.log(err);	
+			//get all entries matching username parameter
+			var data = tweetModel.find({"userName" : req.params.username}).exec(function(err, users){
+				if(err) return res.status(500).send(err);
+				return res.status(200).send(users);
 			});
 		}
 		else
 		{
 				return res.status(500).send("Unauthorized Access");
 		}
-		res.status(200).send();
 });
 
-router.delete('/data/list/:username', function (req, res) {
+router.post('/data/list/:username', function (req, res) {
+	var loggedIn = false;
+	var adminName = process.env.ADMIN_NAME;
+	var adminPW = process.env.ADMIN_PW;
+	if(req.get('login_name') === adminName && req.get('password') === adminPW)
+	{
+		loggedIn = true;
+	}
+	if(loggedIn == true)
+	{
+		//adds username to list of usernames to search in the automated PUT function
+		fs.appendFile('usernames.txt', (req.params.username+'\n'), (err) => {
+		console.log(err);	
+		});
+	}
+	else
+	{
+			return res.status(500).send("Unauthorized Access");
+	}
+	res.status(200).send();
+});
+
+router.delete('/data/user/:username', function (req, res) {
 	var loggedIn = false;
 	var adminName = process.env.ADMIN_NAME;
 	var adminPW = process.env.ADMIN_PW;
