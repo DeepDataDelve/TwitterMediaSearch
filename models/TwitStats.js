@@ -4,6 +4,7 @@ var Schema = mongoose.Schema;
 const responseSchema = new Schema({
   userName: String,
   retweets: Number,
+  replies: Number,
   quotes: Number,
   favorites: Number,
   followers: Number,
