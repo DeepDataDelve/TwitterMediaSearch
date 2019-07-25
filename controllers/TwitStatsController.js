@@ -25,8 +25,8 @@ const schema = require('schm')
 
 const statsSchema = schema({
   userName: String,
-	retweets: Number,
-	replies: Number,
+  retweets: Number,
+  replies: Number,
   quotes: Number,
   favorites: Number,
   followers: Number,
@@ -61,75 +61,23 @@ router.get('/test', function (req, res) {
 
 });
 
-router.post('/test', function (req, res) {
-	let ts = Math.round(new Date().getTime() / 1000);
-	var stats = new tweetModel({
-			userName: "Test_USER"+ts,
-			retweets: (Math.floor(Math.random() * Math.floor(999))),
-			replies: (Math.floor(Math.random() * Math.floor(999))),
-			quotes: (Math.floor(Math.random() * Math.floor(999))),
-			favorites: (Math.floor(Math.random() * Math.floor(999))),
-			followers: (Math.floor(Math.random() * Math.floor(999))),
-			hashtags: "#testing",
-			media: "text",
-			date: new Date().toISOString()
-		});
-	console.log(stats.userName);
-	stats.save(function (err) {
-		if (err) return handleError(err);
-		// saved!
+router.put('/test/fs/', function (req, res) {
+	//initialize variables
+	var resultSet = [];
+	var ts = Math.round(new Date().getTime() / 1000);
+	var tsYesterday = ts - (24 * 3600);
+	//BEGIN LOGIC:
+	fs.readFile('usernames.txt', function(err, data) {
+		if(err) throw err;
+		var array = data.toString().split(/\r?\n/);
+		for(i in array) {
+			console.log(array[i]);
+		}
+		res.status(200).send(array.length.toString() + " users");
 	});
-	console.log("data saved to mongo!");
-	res.status(200).send();
 });
 
-// GETS A SINGLE USER'S POSTS FROM TWITTER (DEBUG VER, TO BE REMOVED)
-router.get('/debug/user/:username', function (req, res) {
-	var resultSet = [];
-	client.get('statuses/user_timeline', {screen_name: req.params.username, count: 50}, function(error, tweets, response) {
-		   if (error) return res.status(500).send("There was a problem retrieving the tweets.");
-		   tweets.some(function(tweet) {
-				console.log("user: " + tweet.user.name);
-				console.log("tweet: " + tweet.text);	
-				let timeStamp = Math.round(new Date(tweet.created_at))/1000;
-				let ts = Math.round(new Date().getTime() / 1000);
-				var tsYesterday = ts - (24 * 3600);
-				let media = tweet.entities;
-				console.log("tags:" + JSON.stringify(tweet.entities.hashtags));
-				console.log("media:" + JSON.stringify(tweet.entities.media));
-				if(media.hashtags)
-				{
-					var tags = "";
-					for(var key in media.hashtags) {
-						tags+=(media.hashtags[key]["text"] + " ");
-					}
-					console.log(tags);
-				}
-				if(media.media)
-				{
-					var mediaType = media.media[0].media_url;
-					console.log(mediaType);
-				}
-				console.log(timeStamp + " " + ts);
-				if(timeStamp < tsYesterday){return true;}
-				var stats = statsSchema.parse({
-						userName: tweet.user.screen_name,
-						retweets: tweet.retweet_count,
-						replies: tweet.reply_count,
-						quotes: tweet.quote_count,
-						favorites: tweet.favorite_count,
-						followers: tweet.user.followers_count,
-						hashtags: tags,
-						media: mediaType,
-						date: tweet.created_at,
-					});
-				resultSet.push(stats);
-		   });
-		   console.log(resultSet.length);
-		   res.status(200).send(resultSet);
-		});
-		//END CLIENT GET	
-	});
+//PUBLIC USE ROUTES: /////////////////////////////////////////////////////////////////////////////////////////
 
 // GETS A SINGLE TOPIC'S POSTS FROM TWITTER
 router.get('/posts/topic/:topic', function (req, res) {
@@ -238,6 +186,8 @@ client.get('statuses/user_timeline', {screen_name: req.params.username, count: 2
 	//END CLIENT GET	
 });
 
+//ADMIN ONLY COMMANDS: //////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 // POSTS A SINGLE TOPIC'S POSTS AND TYPE TO MONGO DB
 router.post('/posts/topic/:topic', function (req, res) {
 //parameters for the search
@@ -251,6 +201,16 @@ var fparams = {
 //other variables
 var ts = Math.round(new Date().getTime() / 1000);
 var tsYesterday = ts - (24 * 3600);
+//auth check
+var loggedIn = false;
+var adminName = process.env.ADMIN_NAME;
+var adminPW = process.env.ADMIN_PW;
+if(req.get('login_name') === adminName && req.get('password') === adminPW)
+{
+	loggedIn = true;
+}
+if(loggedIn == true)
+{
 //BEGIN LOGIC:
 	client.get('search/tweets', fparams, function(error, tweets, response) {
 	   if (error) return res.status(500).send("There was a problem retrieving the tweets.");
@@ -294,13 +254,28 @@ var tsYesterday = ts - (24 * 3600);
 	});
 	//END CLIENT GET
 	res.status(200).send();
+}
+else
+{
+	return res.status(500).send("Unauthorized Access");
+}
+res.status(200).send();
 });
 
 // POSTS A SINGLE USER'S POSTS AND TYPE TO MONGO DB
 router.post('/posts/user/:username', function (req, res) {
-	var ts = Math.round(new Date().getTime() / 1000);
-		var tsYesterday = ts - (24 * 3600);
-
+var ts = Math.round(new Date().getTime() / 1000);
+var tsYesterday = ts - (24 * 3600);
+//check auth
+var loggedIn = false;
+var adminName = process.env.ADMIN_NAME;
+var adminPW = process.env.ADMIN_PW;
+if(req.get('login_name') === adminName && req.get('password') === adminPW)
+{
+	loggedIn = true;
+}
+if(loggedIn == true)
+{
 	client.get('statuses/user_timeline', {screen_name: req.params.username, count: 200}, function(error, tweets, response) {
 	   if (error) return res.status(500).send("There was a problem retrieving the tweets.");
 	   tweets.some(function(tweet) {
@@ -345,25 +320,43 @@ router.post('/posts/user/:username', function (req, res) {
 	});
 	//END CLIENT GET	
 	res.status(200).send();
+}
+else
+{
+	return res.status(500).send("Unauthorized Access");
+}
+res.status(200).send();
 });
 
 // POSTS ALL TRACKED USERS' META INFO TO MONGO DB
 router.put('/posts/user/', function (req, res) {
-	//initialize variables
-	var resultSet = [];
-	var ts = Math.round(new Date().getTime() / 1000);
-	var tsYesterday = ts - (24 * 3600);
+//initialize variables
+var resultSet = [];
+var ts = Math.round(new Date().getTime() / 1000);
+var tsYesterday = ts - (24 * 3600);
+var loggedIn = false;
+//get credentials first
+var adminName = process.env.ADMIN_NAME;
+var adminPW = process.env.ADMIN_PW;
+if(req.get('login_name') === adminName && req.get('password') === adminPW)
+{
+	loggedIn = true;
+}
+if(loggedIn == true)
+{
 	//BEGIN LOGIC:
 	fs.readFile('usernames.txt', function(err, data) {
 		if(err) throw err;
-		var array = data.toString().split("\n");
-		for(username in array) {
+		var array = data.toString().split(/\r?\n/);
+		for(i in array) {
+			let username = array[i];
+			console.log(username);
 			//fill the result set with each
 			client.get('statuses/user_timeline', {screen_name: username, count: 200}, function(error, tweets, response) {
-				if (error) return res.status(500).send("There was a problem retrieving the tweets.");
-				let timeStamp = Math.round(new Date(tweet.created_at))/1000;
-				let mediaType = "text";
+				if (err) console.log("There was a problem retrieving the tweets.");
 				tweets.some(function(tweet) {
+						let timeStamp = Math.round(new Date(tweet.created_at))/1000;
+						let mediaType = "text";
 						if(timeStamp < tsYesterday){return true;}
 						let media = tweet.entities;
 						if(media.hashtags)
@@ -398,15 +391,22 @@ router.put('/posts/user/', function (req, res) {
 							});
 						stats.save(); //save each tweet's metadata to our collection
 				});
+				console.log(username + " saved to db.");
 			 });
 			 //END CLIENT GET	
 		} //END LOOP
+		if (err) return res.status(500).send("There was a problem retrieving the tweets.");
 		res.status(200).send();
 	});
-	//END POST OPERATION	
+	//END POST OPERATION
+}
+else
+{
+	return res.status(500).send("Unauthorized Access");
+}
+res.status(200).send();	
 });
-
-//ADMIN ONLY COMMANDS:
+//Search MONGO DB
 router.get('/data/user/:username', function (req, res) {
 		var loggedIn = false;
 		var adminName = process.env.ADMIN_NAME;
@@ -428,7 +428,7 @@ router.get('/data/user/:username', function (req, res) {
 				return res.status(500).send("Unauthorized Access");
 		}
 });
-
+//add username to list to scheduled search
 router.post('/data/list/:username', function (req, res) {
 	var loggedIn = false;
 	var adminName = process.env.ADMIN_NAME;
@@ -446,11 +446,12 @@ router.post('/data/list/:username', function (req, res) {
 	}
 	else
 	{
-			return res.status(500).send("Unauthorized Access");
+		return res.status(500).send("Unauthorized Access");
 	}
 	res.status(200).send();
 });
 
+//remove username's entries from MONGODB
 router.delete('/data/user/:username', function (req, res) {
 	var loggedIn = false;
 	var adminName = process.env.ADMIN_NAME;
@@ -472,7 +473,7 @@ router.delete('/data/user/:username', function (req, res) {
 	}
 	else
 	{
-			return res.status(500).send("Unauthorized Access");
+		return res.status(500).send("Unauthorized Access");
 	}
 	res.status(200).send();
 });
