@@ -45,7 +45,12 @@ var client = new Twitter({
 router.use(bodyParser.urlencoded({ extended: true }));
 router.use(bodyParser.json());
 
-// test function
+function parseTwitterDate(aDate)
+{   
+  return new Date(Date.parse(aDate.replace(/( \+)/, ' UTC$1')));
+}
+
+// test functions /////////////////////////////////////////////////////////////////////////////////
 router.get('/test', function (req, res) {
 	console.log(client);
 	client.get('search/tweets', {q: '#ios #iphone', count: 10}, function(error, tweets, response) {
@@ -59,6 +64,24 @@ router.get('/test', function (req, res) {
   console.log(testOut);
 	});
 
+});
+
+router.get('/timer', function (req, res) {
+	var ts = Math.round(new Date().getTime() / 1000);
+	console.log("Current timestamp: "+ts)
+	var tsYesterday = ts - (24 * 3600);
+	var loggedIn = false;
+	//get credentials first
+	console.log("Current timestamp -24h: "+tsYesterday)
+	var daysTracked = req.get('days_tracked');
+	if (daysTracked)
+	{
+		let sub_days = parseInt(daysTracked);
+		console.log("Days to search backwards: " + daysTracked);
+		tsYesterday = ts - (24 * 3600 * sub_days);
+		console.log("Current timestamp -"+daysTracked+" days: "+tsYesterday)
+	}
+	res.send(200);
 });
 
 router.put('/test/fs/', function (req, res) {
@@ -314,7 +337,7 @@ if(loggedIn == true)
 					date: tweet.created_at
 				});
 			stats.save();
-			console.log(tweet.created_at);
+			console.log(tweet.created_at + " " + tweet.user.screen_name);
 	   });
 	   //console.log(statsSchema);
 	});
@@ -338,6 +361,14 @@ var loggedIn = false;
 //get credentials first
 var adminName = process.env.ADMIN_NAME;
 var adminPW = process.env.ADMIN_PW;
+var daysTracked = req.get('days_tracked');
+if (daysTracked)
+{
+	console.log("Days to search backwards: " + daysTracked);
+	let sub_days = parseInt(daysTracked);
+	tsYesterday = ts - (24 * 3600 * sub_days);
+	console.log(tsYesterday);
+}
 if(req.get('login_name') === adminName && req.get('password') === adminPW)
 {
 	loggedIn = true;
@@ -350,53 +381,52 @@ if(loggedIn == true)
 		var array = data.toString().split(/\r?\n/);
 		for(i in array) {
 			let username = array[i];
-			console.log(username);
-			//fill the result set with each
+			console.log(username);	
 			client.get('statuses/user_timeline', {screen_name: username, count: 200}, function(error, tweets, response) {
-				if (err) console.log("There was a problem retrieving the tweets.");
+				if (error) console.log("There was a problem retrieving the tweets.");
 				tweets.some(function(tweet) {
-						let timeStamp = Math.round(new Date(tweet.created_at))/1000;
-						let mediaType = "text";
-						if(timeStamp < tsYesterday){return true;}
-						let media = tweet.entities;
-						if(media.hashtags)
-						{
-							var tags = "";
-							for(var key in media.hashtags) {
-								tags+=(media.hashtags[key]["text"] + " ");
-							}
-						}
-						if(media.media)
-						{
-							let extractedMedia = media.media[0].media_url;
-							if(extractedMedia.includes("video_thumb"))
-							{
-								mediaType = "video";
-							}
-							else
-							{
-								mediaType = "image";
-							}
-						}
-						var stats = new tweetModel({
-								userName: tweet.user.screen_name,
-								retweets: tweet.retweet_count,
-								replies: tweet.reply_count,
-								quotes: tweet.quote_count,
-								favorites: tweet.favorite_count,
-								followers: tweet.user.followers_count,
-								hashtags: tags,
-								media: mediaType,
-								date: tweet.created_at
-							});
-						stats.save(); //save each tweet's metadata to our collection
+					 var mediaType = "text";
+					 let timeStamp = Math.round(new Date(tweet.created_at))/1000;
+					 if(timeStamp < tsYesterday){return true;} //break out if tweets are older than 24h
+					 let media = tweet.entities;
+					 if(media.hashtags)
+					 {
+						 var tags = "";
+						 for(var key in media.hashtags) {
+							 tags+=(media.hashtags[key]["text"] + " ");
+						 }
+					 }
+					 if(media.media)
+					 {
+						 let extractedMedia = media.media[0].media_url;
+						 if(extractedMedia.includes("video_thumb"))
+						 {
+							 mediaType = "video";
+						 }
+						 else
+						 {
+							 mediaType = "image";
+						 }
+					 }		
+					 var stats = new tweetModel({
+							 userName: tweet.user.screen_name,
+							 retweets: tweet.retweet_count,
+							 replies: tweet.reply_count,
+							 quotes: tweet.quote_count,
+							 favorites: tweet.favorite_count,
+							 followers: tweet.user.followers_count,
+							 hashtags: tweet.entities.hashtags.text,
+							 media: mediaType,
+							 date: tweet.created_at
+						 });
+					 stats.save();
+					 console.log(username + ' ' + tweet.created_at);
 				});
-				console.log(username + " saved to db.");
+				//console.log(statsSchema);
 			 });
-			 //END CLIENT GET	
+			//fill the result set with each	
 		} //END LOOP
-		if (err) return res.status(500).send("There was a problem retrieving the tweets.");
-		res.status(200).send();
+		//if (err) return res.status(500).send("There was a problem retrieving the tweets.");
 	});
 	//END POST OPERATION
 }
@@ -406,6 +436,7 @@ else
 }
 res.status(200).send();	
 });
+
 //Search MONGO DB
 router.get('/data/user/:username', function (req, res) {
 		var loggedIn = false;
@@ -420,12 +451,16 @@ router.get('/data/user/:username', function (req, res) {
 			//get all entries matching username parameter
 			var data = tweetModel.find({"userName" : req.params.username}).exec(function(err, users){
 				if(err) return res.status(500).send(err);
+				//users.sort((a,b)=>b.followers-a.followers);
+				users.sort((a,b)=>
+				new Date(b.date)- new Date(a.date)
+				);
 				return res.status(200).send(users);
 			});
 		}
 		else
 		{
-				return res.status(500).send("Unauthorized Access");
+			return res.status(500).send("Unauthorized Access");
 		}
 });
 //add username to list to scheduled search
@@ -462,20 +497,18 @@ router.delete('/data/user/:username', function (req, res) {
 	}
 	if(loggedIn == true)
 	{
-		tweetModel.find({ userName: req.params.username }, (err, user) => { 
-			if (err) throw err;
-					// delete this person's entries
-					user.remove(function(err) {
-						if (err) throw err;				
-						console.log('User successfully deleted!');
-					});
-		});
+		tweetModel.deleteMany({"userName" : req.params.username}, function(err, data) {
+			if (err) {
+				return res.status(500).send(err);
+			} else {
+				return res.status(200).send(req.params.username + " successfully deleted.");
+			}
+		  });
 	}
 	else
 	{
 		return res.status(500).send("Unauthorized Access");
 	}
-	res.status(200).send();
 });
 
 module.exports = router;
