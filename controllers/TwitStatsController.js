@@ -20,6 +20,7 @@ db.on('error', console.error.bind(console, 'MongoDB connection error:'));
 
 //Get mongoose schema for tweets
 var tweetModel = require('../models/TwitStats');
+var userTagsModel = require('../models/UserTagsSchema');
 //START: TEST SCHEMA TO REDUCE JSON
 const schema = require('schm')
 
@@ -509,6 +510,31 @@ router.delete('/data/user/:username', function (req, res) {
 	{
 		return res.status(500).send("Unauthorized Access");
 	}
+});
+
+//add username with associated tags to the db
+router.post('/data/tags/:username', function (req, res) {
+	var loggedIn = false;
+	var adminName = process.env.ADMIN_NAME;
+	var adminPW = process.env.ADMIN_PW;
+	if(req.get('login_name') === adminName && req.get('password') === adminPW)
+	{
+		loggedIn = true;
+	}
+	if(loggedIn == true)
+	{
+		//adds username to list of usernames to search in the automated PUT function
+		var userTags = userTagsModel({
+			userName = req.get(userName),
+			tags = req.get(tagsArray)			
+		});
+		userTags.save();
+	}
+	else
+	{
+		return res.status(500).send("Unauthorized Access");
+	}
+	res.status(200).send();
 });
 
 module.exports = router;
