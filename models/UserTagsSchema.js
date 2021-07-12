@@ -7,4 +7,4 @@ var userTagsSchema = new mongoose.Schema({
     }]
 });
 
-module.exports = mongoose.model("responseData", userTagsSchema);
+module.exports = mongoose.model("tagData", userTagsSchema);
