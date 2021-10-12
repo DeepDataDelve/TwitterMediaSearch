@@ -151,39 +151,42 @@ router.get('/posts/user/:username/:daysBack?', function (req, res) {
 	client.get('statuses/user_timeline', {screen_name: req.params.username, count: 200}, function(error, tweets, response) {
 	   if (error) return res.status(500).send("There was a problem retrieving the tweets.");
 	   tweets.some(function(tweet) {
-			let mediaType = "text";
-			let timeStamp = Math.round(new Date(tweet.created_at))/1000;
-			if(timeStamp < tsPastDate){return true;}
-			let media = tweet.entities;
-			if(media.hashtags){
-				var tags = "";
-				for(var key in media.hashtags) {
-					tags+=(media.hashtags[key]["text"] + " ");
+		   if(!tweet.retweeted_status)
+		   {
+				let mediaType = "text";
+				let timeStamp = Math.round(new Date(tweet.created_at))/1000;
+				if(timeStamp < tsPastDate){return true;}
+				let media = tweet.entities;
+				if(media.hashtags){
+					var tags = "";
+					for(var key in media.hashtags) {
+						tags+=(media.hashtags[key]["text"] + " ");
+					}
 				}
-			}
-			if(media.media){
-				let extractedMedia = media.media[0].media_url;
-				if(extractedMedia.includes("video_thumb")){
-					mediaType = "video";
+				if(media.media){
+					let extractedMedia = media.media[0].media_url;
+					if(extractedMedia.includes("video_thumb")){
+						mediaType = "video";
+					}
+					else{
+						mediaType = "image";
+					}
 				}
-				else{
-					mediaType = "image";
-				}
-			}
 
-			let stats = statsSchema.parse({
-					userName: tweet.user.screen_name,
-					retweets: tweet.retweet_count,
-					replies: tweet.reply_count,
-					quotes: tweet.quote_count,
-					favorites: tweet.favorite_count,
-					followers: tweet.user.followers_count,
-					hashtags: tags,
-					media: mediaType,
-					date: tweet.created_at,
-					text: tweet.text.substring(0,100),
-				});
-			resultSet.push(stats);
+				let stats = statsSchema.parse({
+						userName: tweet.user.screen_name,
+						retweets: tweet.retweet_count,
+						replies: tweet.reply_count,
+						quotes: tweet.quote_count,
+						favorites: tweet.favorite_count,
+						followers: tweet.user.followers_count,
+						hashtags: tags,
+						media: mediaType,
+						date: tweet.created_at,
+						text: tweet.text.substring(0,100),
+					});
+				resultSet.push(stats);
+		   }
 	   });
 	   console.log(resultSet.length);
 	   res.status(200).send(resultSet);
@@ -283,40 +286,42 @@ router.post('/posts/user/:username/:daysBack?', function (req, res) {
 	client.get('statuses/user_timeline', {screen_name: req.params.username, count: 200}, function(error, tweets, response) {
 	   if (error) return res.status(500).send("There was a problem retrieving the tweets.");
 	   tweets.some(function(tweet) {
-			let mediaType = "text";
-			let timeStamp = Math.round(new Date(tweet.created_at))/1000;
-			if(timeStamp < tsPastDate){
-				return true;} //break out if tweets are older than 24h
-			let media = tweet.entities;
-			if(media.hashtags){
-				var tags = "";
-				for(var key in media.hashtags) {
-					tags+=(media.hashtags[key]["text"] + " ");
+			if(!tweet.retweeted_status) {
+				let mediaType = "text";
+				let timeStamp = Math.round(new Date(tweet.created_at))/1000;
+				if(timeStamp < tsPastDate){
+					return true;} //break out if tweets are older than 24h
+				let media = tweet.entities;
+				if(media.hashtags){
+					var tags = "";
+					for(var key in media.hashtags) {
+						tags+=(media.hashtags[key]["text"] + " ");
+					}
 				}
+				if(media.media){
+					let extractedMedia = media.media[0].media_url;
+					if(extractedMedia.includes("video_thumb")){
+						mediaType = "video";
+					}
+					else{
+						mediaType = "image";
+					}
+				}		
+				let stats = new tweetModel({
+						userName: tweet.user.screen_name,
+						retweets: tweet.retweet_count,
+						replies: tweet.reply_count,
+						quotes: tweet.quote_count,
+						favorites: tweet.favorite_count,
+						followers: tweet.user.followers_count,
+						hashtags: tweet.entities.hashtags.text,
+						media: mediaType,
+						date: tweet.created_at
+					});
+				stats.save();
+				console.log(tweet.created_at);
 			}
-			if(media.media){
-				let extractedMedia = media.media[0].media_url;
-				if(extractedMedia.includes("video_thumb")){
-					mediaType = "video";
-				}
-				else{
-					mediaType = "image";
-				}
-			}		
-			let stats = new tweetModel({
-					userName: tweet.user.screen_name,
-					retweets: tweet.retweet_count,
-					replies: tweet.reply_count,
-					quotes: tweet.quote_count,
-					favorites: tweet.favorite_count,
-					followers: tweet.user.followers_count,
-					hashtags: tweet.entities.hashtags.text,
-					media: mediaType,
-					date: tweet.created_at
-				});
-			stats.save();
-			console.log(tweet.created_at);
-	   });
+	    });
 	});
 	//END CLIENT GET	
 	res.status(200).send();
@@ -353,6 +358,8 @@ router.put('/posts/trackedusers/', function (req, res) {
 				client.get('statuses/user_timeline', {screen_name: username, count: 200}, function(error, tweets, response) {
 					if (err) console.log("There was a problem retrieving the tweets.");
 					tweets.some(function(tweet) {
+						if(!tweet.retweeted_status)
+						{
 							let timeStamp = Math.round(new Date(tweet.created_at))/1000;
 							let mediaType = "text";
 							if(timeStamp < tsYesterday){return true;}
@@ -384,6 +391,7 @@ router.put('/posts/trackedusers/', function (req, res) {
 									date: tweet.created_at
 								});
 							stats.save(); //save each tweet's metadata to our collection
+						}
 					});
 					console.log(username + " saved to db.");
 				});
