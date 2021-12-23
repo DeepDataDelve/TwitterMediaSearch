@@ -96,7 +96,7 @@ router.get('/posts/topic/:topic/:daysBack?', function (req, res) {
 	}
 	client.get('search/tweets', fparams, function(error, tweets, response) {
 	   if (error) return res.status(500).send("There was a problem retrieving the tweets.");
-	   if(isMyObjectEmpty || tweets.length === 0){
+	   if(tweets.length === 0){
 		return res.status(500).send("There are no tweets to return.");
   		}
 	   tweets.statuses.some(function(tweet) {
@@ -509,7 +509,7 @@ router.post('/data/tags/:username', function (req, res) {
 				const update = { tags: parsedTags };
 				userTagsModel.findOneAndUpdate(filter, update, {upsert: true}, function(err, doc) {
 					if (err) return res.send(500, {error: err});
-					return res.send('Succesfully saved.');
+					return res.status(200).send('Succesfully saved.');
 				});
 			}
 			else{
