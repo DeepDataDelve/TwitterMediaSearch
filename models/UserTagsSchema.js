@@ -5,6 +5,8 @@ var userTagsSchema = new mongoose.Schema({
     tags: [{
         type: String
     }]
+}, {
+    versionKey: false
 });
 
 module.exports = mongoose.model("tagData", userTagsSchema);
