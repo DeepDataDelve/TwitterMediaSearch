@@ -18,11 +18,10 @@
     "express": "^4.17.1",
     "express-rate-limit": "^3.5.3",
     "fs": "0.0.1-security",
-    "log4js": "^5.3.0",
-    "mongoose": "^5.12.10",
-    "morgan": "^1.10.0",
-    "request": "^2.88.2",
-    "request-promise": "^4.2.6",
+    "mongoose": "^5.6.6",
+    "morgan": "^1.9.1",
+    "request": "^2.88.0",
+    "request-promise": "^4.2.4",
     "schm": "^0.4.1",
     "twitter": "^1.7.1"
   }
