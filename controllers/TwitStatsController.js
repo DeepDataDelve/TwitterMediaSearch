@@ -499,18 +499,18 @@ router.post('/data/tags/:username', function (req, res) {
 		fs.readFile('usernames.txt', function(err, data) {
 			if(err) throw err;
 			userNames = data.toString().split(/\r?\n/).filter(e =>  e);
-
-			let parsedTags = req.get('tags_array').toString().split(',').filter(e =>  e);
+			//tags are sent in as a header variable, as just a string with commas
+			let parsedTags = req.get('tags_array').toString().split(',').map(item => item.trim());
 			console.log(req.params.username + " sent in for tags.");
-			console.log("tags: " + parsedTags);
-			
-			if(userNames.indexOf(req.params.username) != -1){
-				//adds username to list of usernames to search in the automated PUT function
-				let userTags = new userTagsModel({
-					userName: req.params.username,
-					tags: parsedTags
-				});		
-				userTags.save();
+			console.log(parsedTags);
+
+			if(userNames.indexOf(req.params.username) != -1){	
+				let filter = { userName: req.params.username };
+				const update = { tags: parsedTags };
+				userTagsModel.findOneAndUpdate(filter, update, {upsert: true}, function(err, doc) {
+					if (err) return res.send(500, {error: err});
+					return res.send('Succesfully saved.');
+				});
 			}
 			else{
 				return res.status(500).send("Username isn't on the serverside tracking list.");
@@ -520,7 +520,6 @@ router.post('/data/tags/:username', function (req, res) {
 	else{
 		return res.status(500).send("Unauthorized Access");
 	}
-	res.status(200).send();
 });
 
 module.exports = router;
