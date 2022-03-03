@@ -75,34 +75,59 @@ router.put('/test/fs/', function (req, res) {
 	});
 });
 
-//PUBLIC USE ROUTES: /////////////////////////////////////////////////////////////////////////////////////////
+//FUNCTIONS: ////////////////////////////////////////////////////////////////////////////////////////////
 
-// GETS A SINGLE TOPIC'S POSTS FROM TWITTER
-router.get('/posts/topic/:topic/:daysBack?', function (req, res) {
-	var resultSet = [];
-	//time stamp variables
-	let ts = Math.round(new Date().getTime() / 1000);
-	let tsPastDate = ts - (24 * 3600); //yesterday by default
-	let daysBack = parseInt(req.params.daysBack);
-	if (req.params.daysBack && !isNaN(daysBack)){
-		tsPastDate = ts - (24 * 3600 * daysBack);
-	}
-	//params for twitter search
-	var fparams = {
-	q: req.params.topic,
-	count: 200,
-	result_type: 'recent',
-	lang: 'en'
-	}
-	client.get('search/tweets', fparams, function(error, tweets, response) {
-	   if (error) return res.status(500).send("There was a problem retrieving the tweets.");
-	   if(tweets.length === 0){
-		return res.status(500).send("There are no tweets to return.");
-  		}
-	   tweets.statuses.some(function(tweet) {
-			let timeStamp = Math.round(new Date(tweet.created_at))/1000;
-			let media = tweet.entities;
+function formatTweetResponseData(tweets, resultSet, tsLookback){
+	tweets.some(function(tweet) {
+		if(!tweet.retweeted_status)
+		{
 			let mediaType = "text";
+			let timeStamp = Math.round(new Date(tweet.created_at))/1000;
+			if(timeStamp < tsLookback){
+				 return true;
+			}
+			let media = tweet.entities;
+			if(media.hashtags){
+				var tags = "";
+				for(var key in media.hashtags) {
+					 tags += (media.hashtags[key]["text"] + " ");
+				}
+			 }
+			if(media.media){
+				 let extractedMedia = media.media[0].media_url;
+				 if(extractedMedia.includes("video_thumb")){
+					 mediaType = "video";
+				 }
+				 else{
+					 mediaType = "image";
+				 }
+			}
+
+			let stats = statsSchema.parse({
+					userName: tweet.user.screen_name,
+					retweets: tweet.retweet_count,
+					replies: tweet.reply_count,
+					quotes: tweet.quote_count,
+					favorites: tweet.favorite_count,
+					followers: tweet.user.followers_count,
+					hashtags: tags,
+					media: mediaType,
+					date: tweet.created_at,
+					text: tweet.text.substring(0,100),
+				 });
+			resultSet.push(stats);
+		}
+	});
+}
+
+function saveTweetDataToMongoDb(tweets, tsLookback){
+	tweets.some(function(tweet) {
+		if(!tweet.retweeted_status) {
+			let mediaType = "text";
+			let timeStamp = Math.round(new Date(tweet.created_at))/1000;
+			if(timeStamp <  tsLookback){
+				return true;} //break out if tweets are older than 24h or the given amount of days back.
+			let media = tweet.entities;
 			if(media.hashtags){
 				var tags = "";
 				for(var key in media.hashtags) {
@@ -117,25 +142,52 @@ router.get('/posts/topic/:topic/:daysBack?', function (req, res) {
 				else{
 					mediaType = "image";
 				}
-			}
-			if(timeStamp < tsPastDate){return true;} //stop parsing tweets once we hit something from before the last 24H
-			
-			let stats = statsSchema.parse({
+			}		
+			let stats = new tweetModel({
 					userName: tweet.user.screen_name,
 					retweets: tweet.retweet_count,
 					replies: tweet.reply_count,
 					quotes: tweet.quote_count,
 					favorites: tweet.favorite_count,
-					followers: tweet.user.follower_count,
-					hashtags: tags,
+					followers: tweet.user.followers_count,
+					hashtags: tweet.entities.hashtags.text,
 					media: mediaType,
-					date: tweet.created_at,
-					text: tweet.text.substring(0,100),
+					date: tweet.created_at
 				});
-			resultSet.push(stats);
-	   });
-	   console.log(resultSet.length);
-	   res.status(200).send(resultSet);
+			stats.save();
+			//console.log(tweet.created_at);
+		}
+	});
+}
+
+//PUBLIC USE ROUTES: /////////////////////////////////////////////////////////////////////////////////////////
+
+// GETS A SINGLE TOPIC'S POSTS FROM TWITTER
+router.get('/posts/topic/:topic/:daysBack?', function (req, res) {
+	var resultSet = [];
+	//time stamp variables
+	let ts = Math.round(new Date().getTime() / 1000);
+	let tsPastDate = ts - (24 * 3600); //yesterday by default
+	let daysBack = parseInt(req.params.daysBack);
+	if (req.params.daysBack && !isNaN(daysBack)){
+		tsPastDate = ts - (24 * 3600 * daysBack);
+	}
+	//params for twitter search
+	var fparams = {
+		q: req.params.topic,
+		count: 200,
+		result_type: 'recent',
+		lang: 'en'
+	}
+	client.get('search/tweets', fparams, function(error, tweets, response) {
+	   	if (error) return res.status(500).send("There was a problem retrieving the tweets.");
+	   	if(tweets.length === 0){
+			return res.status(500).send("There are no tweets to return.");
+		}
+		let extractedTweets = tweets.statuses;
+		formatTweetResponseData(extractedTweets, resultSet, tsPastDate);
+		console.log(resultSet.length);
+		res.status(200).send(resultSet);
 	});
 	//END CLIENT GET
 });
@@ -152,47 +204,14 @@ router.get('/posts/user/:username/:daysBack?', function (req, res) {
 	}
 	//BEGIN get from twitter API
 	client.get('statuses/user_timeline', {screen_name: req.params.username, count: 200}, function(error, tweets, response) {
-	   if (error) return res.status(500).send("There was a problem retrieving the tweets.");
-	   tweets.some(function(tweet) {
-		   if(!tweet.retweeted_status)
-		   {
-				let mediaType = "text";
-				let timeStamp = Math.round(new Date(tweet.created_at))/1000;
-				if(timeStamp < tsPastDate){return true;}
-				let media = tweet.entities;
-				if(media.hashtags){
-					var tags = "";
-					for(var key in media.hashtags) {
-						tags+=(media.hashtags[key]["text"] + " ");
-					}
-				}
-				if(media.media){
-					let extractedMedia = media.media[0].media_url;
-					if(extractedMedia.includes("video_thumb")){
-						mediaType = "video";
-					}
-					else{
-						mediaType = "image";
-					}
-				}
-
-				let stats = statsSchema.parse({
-						userName: tweet.user.screen_name,
-						retweets: tweet.retweet_count,
-						replies: tweet.reply_count,
-						quotes: tweet.quote_count,
-						favorites: tweet.favorite_count,
-						followers: tweet.user.followers_count,
-						hashtags: tags,
-						media: mediaType,
-						date: tweet.created_at,
-						text: tweet.text.substring(0,100),
-					});
-				resultSet.push(stats);
-		   }
-	   });
-	   console.log(resultSet.length);
-	   res.status(200).send(resultSet);
+		if (error) return res.status(500).send("There was a problem retrieving the tweets.");
+		if(tweets.length === 0){
+			return res.status(500).send("There are no tweets to return.");
+		}
+		console.log(tweets.length);
+		formatTweetResponseData(tweets, resultSet, tsPastDate)
+		console.log(resultSet.length);
+		res.status(200).send(resultSet);
 	});
 	//END CLIENT GET	
 });
@@ -203,10 +222,10 @@ router.get('/posts/user/:username/:daysBack?', function (req, res) {
 router.post('/posts/topic/:topic/:daysBack?', function (req, res) {
 	//parameters for the search
 	var fparams = {
-	q: req.params.topic,
-	count: 200,
-	result_type: 'recent',
-	lang: 'en'
+		q: req.params.topic,
+		count: 200,
+		result_type: 'recent',
+		lang: 'en'
 	}
 	//other variables
 	let ts = Math.round(new Date().getTime() / 1000);
@@ -225,48 +244,15 @@ router.post('/posts/topic/:topic/:daysBack?', function (req, res) {
 	if(loggedIn == true){
 	//BEGIN LOGIC:
 		client.get('search/tweets', fparams, function(error, tweets, response) {
-		if (error) return res.status(500).send("There was a problem retrieving the tweets.");
-		if(tweets[0]){
-			tweets.statuses.some(function(tweet) {
-					let timeStamp = Math.round(new Date(tweet.created_at))/1000;
-					if(timeStamp < tsPastDate){return true;}
-					let media = tweet.entities;
-					let mediaType = "text";
-					if(media.hashtags){
-						var tags = "";
-						for(var key in media.hashtags) {
-							tags+=(media.hashtags[key]["text"] + " ");
-						}
-					}
-					if(media.media){
-						let extractedMedia = media.media[0].media_url;
-						if(extractedMedia.includes("video_thumb")){
-							mediaType = "video";
-						}
-						else{
-							mediaType = "image";
-						}
-					}
-					var stats = new tweetModel({
-							userName: tweet.user.screen_name,
-							retweets: tweet.retweet_count,
-							replies: tweet.reply_count,
-							quotes: tweet.quote_count,
-							favorites: tweet.favorite_count,
-							followers: tweet.user.followers_count,
-							hashtags: tags,
-							media: mediaType,
-							date: tweet.created_at
-						});
-					stats.save();
-				});
+			if (error) return res.status(500).send("There was a problem retrieving the tweets.");
+			if(tweets[0]){ //only save if we have any tweets
+				saveTweetDataToMongoDb(tweets.statuses, tsPastDate);
 			}
 		});
 		//END CLIENT GET
 		res.status(200).send();
 	}
-	else
-	{
+	else{
 		return res.status(500).send("Unauthorized Access");
 	}
 	res.status(200).send();
@@ -287,56 +273,21 @@ router.post('/posts/user/:username/:daysBack?', function (req, res) {
 	if(req.get('login_name') === adminName && req.get('password') === adminPW){
 		loggedIn = true;
 	}
+
 	if(loggedIn == true){
-	client.get('statuses/user_timeline', {screen_name: req.params.username, count: 200}, function(error, tweets, response) {
-	   if (error) return res.status(500).send("There was a problem retrieving the tweets.");
-	   if(tweets[0]){
-		tweets.some(function(tweet) {
-				if(!tweet.retweeted_status) {
-					let mediaType = "text";
-					let timeStamp = Math.round(new Date(tweet.created_at))/1000;
-					if(timeStamp < tsPastDate){
-						return true;} //break out if tweets are older than 24h
-					let media = tweet.entities;
-					if(media.hashtags){
-						var tags = "";
-						for(var key in media.hashtags) {
-							tags+=(media.hashtags[key]["text"] + " ");
-						}
-					}
-					if(media.media){
-						let extractedMedia = media.media[0].media_url;
-						if(extractedMedia.includes("video_thumb")){
-							mediaType = "video";
-						}
-						else{
-							mediaType = "image";
-						}
-					}		
-					let stats = new tweetModel({
-							userName: tweet.user.screen_name,
-							retweets: tweet.retweet_count,
-							replies: tweet.reply_count,
-							quotes: tweet.quote_count,
-							favorites: tweet.favorite_count,
-							followers: tweet.user.followers_count,
-							hashtags: tweet.entities.hashtags.text,
-							media: mediaType,
-							date: tweet.created_at
-						});
-					stats.save();
-					console.log(tweet.created_at);
-				}
-			});
-		}
-	});
-	//END CLIENT GET	
-	res.status(200).send();
+		client.get('statuses/user_timeline', {screen_name: req.params.username, count: 200}, function(error, tweets, response) {
+			if (error) return res.status(500).send("There was a problem retrieving the tweets.");
+			if(tweets[0]){
+			saveTweetDataToMongoDb(tweets, tsPastDate)
+			}
+		});
+		//END CLIENT GET	
+		res.status(200).send();
 	}
-	else
-	{
+	else{
 		return res.status(500).send("Unauthorized Access");
 	}
+
 	res.status(200).send();
 });
 
@@ -365,51 +316,15 @@ router.put('/posts/trackedusers/:daysBack?', function (req, res) {
 			for(i in usernames) {
 				let username = usernames[i];
 				if(username === ""){
-					throw err;
+					throw err; //if, for some reason, there is an extra return character, we don't want to process it.
 				}
 				console.log(username);
 				//fill the result set with each
 				client.get('statuses/user_timeline', {screen_name: username, count: 200}, function(error, tweets, response) {
 					if (error) console.log("There was a problem retrieving the tweets.");
-						if(tweets[0]){
-							tweets.some(function(tweet) {
-								if(!tweet.retweeted_status)
-								{
-									let timeStamp = Math.round(new Date(tweet.created_at))/1000;
-									let mediaType = "text";
-									if(timeStamp < tsPastDate){return true;}
-									let media = tweet.entities;
-									if(media.hashtags){
-										var tags = "";
-										for(var key in media.hashtags) {
-											tags+=(media.hashtags[key]["text"] + " ");
-										}
-									}
-									if(media.media){
-										let extractedMedia = media.media[0].media_url;
-										if(extractedMedia.includes("video_thumb")){
-											mediaType = "video";
-										}
-										else{
-											mediaType = "image";
-										}
-									}
-									let stats = new tweetModel({
-											userName: tweet.user.screen_name,
-											retweets: tweet.retweet_count,
-											replies: tweet.reply_count,
-											quotes: tweet.quote_count,
-											favorites: tweet.favorite_count,
-											followers: tweet.user.followers_count,
-											hashtags: tags,
-											media: mediaType,
-											date: tweet.created_at
-										});
-									stats.save(); //save each tweet's metadata to our collection
-									console.log(username + " saved to db.");
-								}
-							});
-						}
+					if(tweets[0]){
+						saveTweetDataToMongoDb(tweets, tsPastDate);
+					}
 				});//END CLIENT GET	
 			} //END LOOP
 			if (err) return res.status(500).send("There was a problem retrieving the tweets.");
@@ -417,8 +332,7 @@ router.put('/posts/trackedusers/:daysBack?', function (req, res) {
 		});
 		//END POST OPERATION
 	}
-	else
-	{
+	else{
 		return res.status(500).send("Unauthorized Access");
 	}
 	res.status(200).send();	
@@ -438,8 +352,8 @@ router.get('/data/user/:username', function (req, res) {
 			return res.status(200).send(users);
 		});
 	}
-	else{
-			return res.status(500).send("Unauthorized Access");
+	else {
+		return res.status(500).send("Unauthorized Access");
 	}
 });
 //add username to list to scheduled search
@@ -456,7 +370,7 @@ router.post('/data/list/:username', function (req, res) {
 		console.log(err);	
 		});
 	}
-	else{
+	else {
 		return res.status(500).send("Unauthorized Access");
 	}
 	res.status(200).send();
